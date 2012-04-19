@@ -24,7 +24,9 @@ var package = require( "./package" ),
 	licenses = grunt.utils._.pluck( package.licenses, "type" ).join( ", " ),
 	version = package.version,
 	year = (new Date()).getFullYear(),
-	buildDate = getDate();
+	buildDate = getDate(),
+	buildDir = "amplify-" + version,
+	distVer = "dist/" + buildDir;
 
 grunt.initConfig({
 	meta: {
@@ -49,7 +51,7 @@ grunt.initConfig({
 				"build/README.txt": "README.txt",
 				"vsdoc/amplify-vsdoc.js": "amplify-vsdoc.js"
 			},
-			dest: "dist"
+			dest: distVer
 		},
 		src: {
 			src: [
@@ -62,7 +64,15 @@ grunt.initConfig({
 			renames: {
 				"build/src-README.txt": "README.txt"
 			},
-			dest: "dist/src"
+			dest: distVer + "/src"
+		},
+		min: {
+			src: [
+				"dist/*.min.js",
+				"dist/individual/*"
+			],
+			dest: distVer,
+			strip: /^dist\//
 		}
 	},
 
@@ -70,11 +80,11 @@ grunt.initConfig({
 		full: {
 			src: [
 				"<banner:meta.bannerAll>",
-				"dist/src/core/amplify.core.js",
-				"dist/src/store/amplify.store.js",
-				"dist/src/request/amplify.request.js"
+				distVer + "/src/core/amplify.core.js",
+				distVer + "/src/store/amplify.store.js",
+				distVer + "/src/request/amplify.request.js"
 			],
-			dest: "dist/amplify.js"
+			dest: distVer + "/amplify.js"
 		}
 	},
 
@@ -82,7 +92,14 @@ grunt.initConfig({
 		"dist/individual/amplify.core.min.js": [ "<banner:meta.bannerCore>", "core/amplify.core.js" ],
 		"dist/individual/amplify.store.min.js": [ "<banner:meta.bannerStore>", "store/amplify.store.js" ],
 		"dist/individual/amplify.request.min.js": [ "<banner:meta.bannerRequest>", "request/amplify.request.js" ],
-		"dist/amplify.min.js": [ "<banner:meta.bannerAll>", "dist/amplify.js" ]
+		"dist/amplify.min.js": [ "<banner:meta.bannerAll>", distVer + "/amplify.js" ]
+	},
+
+	zip: {
+		dist: {
+			src: buildDir,
+			dest: buildDir + ".zip"
+		}
 	}
 });
 
@@ -110,10 +127,12 @@ grunt.registerMultiTask( "copy", "Copy files to destination folder and replace @
 	var fileName,
 		files = grunt.file.expandFiles( this.file.src ),
 		target = this.file.dest + "/",
+		strip = this.data.strip,
 		renameCount = 0;
 
 	files.forEach(function( fileName ) {
-		copyFile( fileName, target + fileName );
+		var targetFile = strip ? fileName.replace( strip, "" ) : fileName;
+		copyFile( fileName, target + targetFile );
 	});
 	grunt.log.writeln( "Copied " + files.length + " files." );
 
@@ -126,6 +145,28 @@ grunt.registerMultiTask( "copy", "Copy files to destination folder and replace @
 	}
 });
 
-grunt.registerTask( "default", "clean copy concat min" );
+grunt.registerMultiTask( "zip", "Create a zip file", function() {
+	var done = this.async(),
+		src = this.file.src,
+		dest = this.file.dest;
+
+	grunt.utils.spawn({
+		cmd: "zip",
+		args: [ "-r", dest, src ],
+		opts: {
+			cwd: "dist"
+		}
+	}, function( err, result ) {
+		if ( err ) {
+			grunt.log.error( err );
+			done();
+			return;
+		}
+		grunt.log.writeln( "Zipped " + dest );
+		done();
+	});
+});
+
+grunt.registerTask( "default", "clean copy:dist copy:src concat min copy:min zip" );
 
 };
